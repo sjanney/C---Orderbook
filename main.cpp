@@ -19,9 +19,23 @@
 #include <tuple>
 
 /**
- * OrderType defines the behavior of orders in the system:
- * - GoodTilCancel: Order remains active until explicitly cancelled
- * - FillAndKill: Order must be filled immediately (fully or partially) or cancelled
+ * OrderBook System Architecture
+ * 
+ * This implementation represents a limit order book system commonly used in financial trading.
+ * The system maintains two primary order lists:
+ * 1. Bids (buy orders) - sorted in descending order by price
+ * 2. Asks (sell orders) - sorted in ascending order by price
+ * 
+ * Key Components:
+ * - Order matching engine with price-time priority
+ * - Support for GoodTilCancel and FillAndKill order types
+ * - Real-time order book level information
+ * - Order modification and cancellation capabilities
+ * 
+ * Performance Considerations:
+ * - Uses std::map for price levels (O(log n) for insertions/deletions)
+ * - Uses std::list for orders at each price level (O(1) for insertions/deletions)
+ * - Uses std::unordered_map for order lookup by ID (O(1) average case)
  */
 
 enum class OrderType {
@@ -59,7 +73,6 @@ using LevelInfos = std::vector<LevelInfo>;
  * OrderbookLevelInfos provides a snapshot of the entire order book
  * Contains vectors of LevelInfo for both bid and ask sides
  */
-
 class OrderbookLevelInfos {
 public:
     OrderbookLevelInfos(const LevelInfos& bids, const LevelInfos& asks) 
@@ -73,6 +86,10 @@ private:
     LevelInfos asks;  // Ask price levels sorted low to high
 };
 
+/**
+ * Order class represents a single order in the system
+ * Contains all essential order information and methods to manage its lifecycle
+ */
 class Order {
 public:
     Order(OrderType type, OrderId id, Side s, Price p, Quantity q) 
@@ -111,7 +128,7 @@ private:
     Quantity remainingQuantity;
 };
 
-// Pointer aliases for memory management
+// Smart pointer aliases for memory management
 using OrderPtr = std::shared_ptr<Order>;
 using OrderList = std::list<OrderPtr>;
 
@@ -358,7 +375,7 @@ public:
         return orders.size(); 
     }
 
-     /**
+    /**
      * Creates a snapshot of current order book state
      * @returns aggregated level information for both sides of the book
      */
@@ -385,22 +402,27 @@ public:
     }
 };
 
+/**
+ * Example usage of the OrderBook system
+ */
 int main() {
     OrderBook orderbook;
     
-    // Test basic order addition and cancellation
+    // Create and add a new order
     const OrderId orderId = 1;
     auto order = std::make_shared<Order>(
         OrderType::GoodTilCancel, 
         orderId, 
         Side::Buy, 
-        100, 
-        10
+        100,  // price
+        10    // quantity
     );
     
+    // Add order and print size
     orderbook.AddOrder(order);
     std::cout << "Order count: " << orderbook.Size() << std::endl;
     
+    // Cancel order and print size
     orderbook.CancelOrder(orderId);
     std::cout << "Order count after cancel: " << orderbook.Size() << std::endl;
 
