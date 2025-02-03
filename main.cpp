@@ -1,23 +1,3 @@
-/**
- * OrderBook System Architecture
- * 
- * This implementation represents a limit order book system. 
- * The system maintains two primary order lists:
- * 1. Bids (buy orders) - sorted in descending order by price
- * 2. Asks (sell orders) - sorted in ascending order by price
- * 
- * Key Components:
- * - Order matching engine with price-time priority
- * - Support for GoodTilCancel and FillAndKill order types
- * - Real-time order book level information
- * - Order modification and cancellation capabilities
- * 
- * Performance Considerations:
- * - Uses std::map for price levels (O(log n) for insertions/deletions)
- * - Uses std::list for orders at each price level (O(1) for insertions/deletions)
- * - Uses std::unordered_map for order lookup by ID (O(1) average case)
- */
-
 #include <iostream>
 #include <map>
 #include <set>
@@ -43,6 +23,7 @@
  * - GoodTilCancel: Order remains active until explicitly cancelled
  * - FillAndKill: Order must be filled immediately (fully or partially) or cancelled
  */
+
 enum class OrderType {
     GoodTilCancel,
     FillAndKill
@@ -78,6 +59,7 @@ using LevelInfos = std::vector<LevelInfo>;
  * OrderbookLevelInfos provides a snapshot of the entire order book
  * Contains vectors of LevelInfo for both bid and ask sides
  */
+
 class OrderbookLevelInfos {
 public:
     OrderbookLevelInfos(const LevelInfos& bids, const LevelInfos& asks) 
@@ -91,10 +73,6 @@ private:
     LevelInfos asks;  // Ask price levels sorted low to high
 };
 
-/**
- * Order class represents a single order in the system
- * Contains all essential order information and methods to manage its lifecycle
- */
 class Order {
 public:
     Order(OrderType type, OrderId id, Side s, Price p, Quantity q) 
@@ -133,7 +111,7 @@ private:
     Quantity remainingQuantity;
 };
 
-// Smart pointer aliases for memory management
+// Pointer aliases for memory management
 using OrderPtr = std::shared_ptr<Order>;
 using OrderList = std::list<OrderPtr>;
 
@@ -251,7 +229,67 @@ private:
      * @returns vector of executed trades
      */
     Trades MatchOrders() {
-        // ... [Previous matching logic remains the same]
+        Trades trades;
+        trades.reserve(orders.size());
+
+        while (!bids.empty() && !asks.empty()) {
+            auto bidIt = bids.begin();
+            auto askIt = asks.begin();
+            
+            if (bidIt->first < askIt->first) break;
+
+            OrderList& bidList = bidIt->second;
+            OrderList& askList = askIt->second;
+
+            while (!bidList.empty() && !askList.empty()) {
+                OrderPtr bid = bidList.front();
+                OrderPtr ask = askList.front();
+
+                Quantity quantity = std::min(
+                    bid->GetRemainingQuantity(),
+                    ask->GetRemainingQuantity()
+                );
+
+                bid->Fill(quantity);
+                ask->Fill(quantity);
+
+                trades.emplace_back(
+                    TradeInfo(bid->GetOrderId(), bid->GetPrice(), quantity),
+                    TradeInfo(ask->GetOrderId(), ask->GetPrice(), quantity)
+                );
+
+                if (bid->IsFilled()) {
+                    bidList.pop_front();
+                    orders.erase(bid->GetOrderId());
+                }
+                if (ask->IsFilled()) {
+                    askList.pop_front();
+                    orders.erase(ask->GetOrderId());
+                }
+                
+                if (bidList.empty()) bids.erase(bidIt);
+                if (askList.empty()) asks.erase(askIt);
+            }
+        }
+
+        // Handle unfilled FillAndKill orders
+        for (const auto& orderPair : bids) {
+            const OrderList& orderList = orderPair.second;
+            if (!orderList.empty() && 
+                orderList.front()->GetOrderType() == OrderType::FillAndKill) {
+                CancelOrder(orderList.front()->GetOrderId());
+            }
+        }
+
+        for (const auto& orderPair : asks) {
+            const OrderList& orderList = orderPair.second;
+            if (!orderList.empty() && 
+                orderList.front()->GetOrderType() == OrderType::FillAndKill) {
+                CancelOrder(orderList.front()->GetOrderId());
+            }
+        }
+
+        return trades;
     }
 
 public:
@@ -260,7 +298,22 @@ public:
      * @returns vector of trades if order was matched
      */
     Trades AddOrder(OrderPtr order) {
-        // ... [Previous AddOrder logic remains the same]
+        if (orders.find(order->GetOrderId()) != orders.end()) {
+            return Trades();
+        }
+
+        if (order->GetOrderType() == OrderType::FillAndKill && 
+            !CanMatch(order->GetSide(), order->GetPrice())) {
+            return Trades();
+        }
+
+        if (order->GetSide() == Side::Buy) {
+            ProcessOrder(order, bids);
+        } else {
+            ProcessOrder(order, asks);
+        }
+
+        return MatchOrders();
     }
 
     /**
@@ -268,7 +321,20 @@ public:
      * Removes order from both price level and ID lookup
      */
     void CancelOrder(OrderId orderId) {
-        // ... [Previous CancelOrder logic remains the same]
+        auto it = orders.find(orderId);
+        if (it == orders.end()) return;
+
+        OrderPtr order = it->second.order;
+        auto& orderMap = (order->GetSide() == Side::Buy) ? bids : asks;
+        
+        OrderList& orderList = orderMap[order->GetPrice()];
+        orderList.erase(it->second.location);
+        
+        if (orderList.empty()) {
+            orderMap.erase(order->GetPrice());
+        }
+        
+        orders.erase(orderId);
     }
 
     /**
@@ -277,7 +343,12 @@ public:
      * @returns vector of trades if modified order was matched
      */
     Trades ModifyOrder(const OrderModify& modify) {
-        // ... [Previous ModifyOrder logic remains the same]
+        auto it = orders.find(modify.GetOrderId());
+        if (it == orders.end()) return Trades();
+
+        OrderType type = it->second.order->GetOrderType();
+        CancelOrder(modify.GetOrderId());
+        return AddOrder(modify.ToOrderPtr(type));
     }
 
     /**
@@ -287,36 +358,49 @@ public:
         return orders.size(); 
     }
 
-    /**
+     /**
      * Creates a snapshot of current order book state
      * @returns aggregated level information for both sides of the book
      */
     OrderbookLevelInfos GetOrderInfos() const {
-        // ... [Previous GetOrderInfos logic remains the same]
+        LevelInfos bidInfos, askInfos;
+        
+        for (const auto& [price, orderList] : bids) {
+            Quantity total = 0;
+            for (const auto& order : orderList) {
+                total += order->GetRemainingQuantity();
+            }
+            bidInfos.emplace_back(price, total);
+        }
+        
+        for (const auto& [price, orderList] : asks) {
+            Quantity total = 0;
+            for (const auto& order : orderList) {
+                total += order->GetRemainingQuantity();
+            }
+            askInfos.emplace_back(price, total);
+        }
+
+        return OrderbookLevelInfos(bidInfos, askInfos);
     }
 };
 
-/**
- * Example usage of the OrderBook system
- */
 int main() {
     OrderBook orderbook;
     
-    // Create and add a new order
+    // Test basic order addition and cancellation
     const OrderId orderId = 1;
     auto order = std::make_shared<Order>(
         OrderType::GoodTilCancel, 
         orderId, 
         Side::Buy, 
-        100,  // price
-        10    // quantity
+        100, 
+        10
     );
     
-    // Add order and print size
     orderbook.AddOrder(order);
     std::cout << "Order count: " << orderbook.Size() << std::endl;
     
-    // Cancel order and print size
     orderbook.CancelOrder(orderId);
     std::cout << "Order count after cancel: " << orderbook.Size() << std::endl;
 
