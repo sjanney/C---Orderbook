@@ -40,7 +40,7 @@ Cancel Order: CANCEL 12345 (Cancels order with ID 12345)
 
 Match Orders: The system automatically matches compatible buy and sell orders.
 
-Code Structure
+# Code Structure
 
 order_book.c – Core implementation of the order book.
 
@@ -50,7 +50,7 @@ main.c – Entry point for the program.
 
 Makefile – Automates the build process.
 
-Future Improvements
+# Future Improvements
 
 Implement persistent storage for orders.
 
@@ -60,11 +60,11 @@ Add support for different order types (limit, market, stop-loss).
 
 Enhance logging and debugging features.
 
-License
+# License
 
 This project is licensed under the MIT License.
 
-Contributors
+# Contributors
 
 Shane Janney
 
