@@ -1,10 +1,10 @@
-Order Book System
+#Order Book System
 
-Overview
+#Overview
 
 The Order Book System is a high-performance C implementation for managing and matching buy and sell orders in a financial trading system. This project efficiently handles order matching, insertion, and cancellation while maintaining an organized structure to optimize lookup and execution.
 
-Features
+# Features
 
 Efficiently manages buy and sell orders.
 
@@ -14,7 +14,7 @@ Supports order insertion, modification, and cancellation.
 
 Uses data structures optimized for fast order retrieval.
 
-Installation
+# Installation
 
 To build and run the project, follow these steps:
 
@@ -28,11 +28,11 @@ gcc -o order_book order_book.c -Wall -Wextra -O2
 # Run the program
 ./order_book
 
-Usage
+# Usage
 
 The system operates by processing commands such as adding, canceling, and matching orders.
 
-Example Commands:
+# Example Commands:
 
 Add Order: ADD BUY 100 10.50  (Adds a buy order of 100 units at $10.50)
 
@@ -66,7 +66,7 @@ This project is licensed under the MIT License.
 
 Contributors
 
-[Your Name]
+Shane Janney
 
 Contributions welcome! Open a pull request if you'd like to contribute.
 
