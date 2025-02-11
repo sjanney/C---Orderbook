@@ -17,6 +17,10 @@
 #include <variant>
 #include <optional>
 #include <tuple>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <memory>
 
 /**
  * OrderBook System Architecture
@@ -407,24 +411,91 @@ public:
  */
 int main() {
     OrderBook orderbook;
-    
-    // Create and add a new order
-    const OrderId orderId = 1;
-    auto order = std::make_shared<Order>(
-        OrderType::GoodTilCancel, 
-        orderId, 
-        Side::Buy, 
-        100,  // price
-        10    // quantity
-    );
-    
-    // Add order and print size
-    orderbook.AddOrder(order);
-    std::cout << "Order count: " << orderbook.Size() << std::endl;
-    
-    // Cancel order and print size
-    orderbook.CancelOrder(orderId);
-    std::cout << "Order count after cancel: " << orderbook.Size() << std::endl;
+    std::string line;
 
+    std::cout << "Welcome to the Order Book System.\n";
+    std::cout << "Commands: ADD, CANCEL, MODIFY, SNAPSHOT, EXIT\n";
+
+    while (true) {
+        std::cout << "\nEnter command: ";
+        std::getline(std::cin, line);
+
+        // Use a string stream to parse the command
+        std::istringstream iss(line);
+        std::string command;
+        iss >> command;
+
+        if (command == "EXIT") {
+            break;
+        }
+        else if (command == "ADD") {
+            // Expected format:
+            // ADD <OrderType> <Side> <OrderId> <Price> <Quantity>
+            std::string orderTypeStr, sideStr;
+            OrderId id;
+            Price price;
+            Quantity quantity;
+            if (!(iss >> orderTypeStr >> sideStr >> id >> price >> quantity)) {
+                std::cout << "Invalid input format for ADD.\n";
+                continue;
+            }
+            // Map string to enum values
+            OrderType orderType = (orderTypeStr == "GTC") ? OrderType::GoodTilCancel : OrderType::FillAndKill;
+            Side side = (sideStr == "BUY") ? Side::Buy : Side::Sell;
+
+            auto order = std::make_shared<Order>(orderType, id, side, price, quantity);
+            Trades trades = orderbook.AddOrder(order);
+
+            std::cout << "Order added. Trades executed: " << trades.size() << "\n";
+            // Optionally, you can print details of each trade here.
+        }
+        else if (command == "CANCEL") {
+            // Expected format: CANCEL <OrderId>
+            OrderId id;
+            if (!(iss >> id)) {
+                std::cout << "Invalid input format for CANCEL.\n";
+                continue;
+            }
+            orderbook.CancelOrder(id);
+            std::cout << "Order " << id << " cancelled.\n";
+        }
+        else if (command == "MODIFY") {
+            // Expected format:
+            // MODIFY <OrderId> <Side> <Price> <Quantity>
+            OrderId id;
+            std::string sideStr;
+            Price price;
+            Quantity quantity;
+            if (!(iss >> id >> sideStr >> price >> quantity)) {
+                std::cout << "Invalid input format for MODIFY.\n";
+                continue;
+            }
+            Side side = (sideStr == "BUY") ? Side::Buy : Side::Sell;
+            OrderModify modify(id, side, price, quantity);
+            Trades trades = orderbook.ModifyOrder(modify);
+            std::cout << "Order modified. Trades executed: " << trades.size() << "\n";
+        }
+        else if (command == "SNAPSHOT") {
+            // Print a summary of the current order book state.
+            OrderbookLevelInfos infos = orderbook.GetOrderInfos();
+            const LevelInfos& bidLevels = infos.GetBids();
+            const LevelInfos& askLevels = infos.GetAsks();
+            
+            std::cout << "\nOrder Book Snapshot:\n";
+            std::cout << "Bids:\n";
+            for (const auto& level : bidLevels) {
+                std::cout << "Price: " << level.price << " Quantity: " << level.quantity << "\n";
+            }
+            std::cout << "Asks:\n";
+            for (const auto& level : askLevels) {
+                std::cout << "Price: " << level.price << " Quantity: " << level.quantity << "\n";
+            }
+        }
+        else {
+            std::cout << "Unknown command. Please try again.\n";
+        }
+    }
+
+    std::cout << "Exiting Order Book System.\n";
     return 0;
 }
